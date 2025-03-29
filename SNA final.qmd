@@ -5,7 +5,7 @@ title: "SNA final try out local"
 ## Introduction
 
 hello how are you 
-Our first step was to come up with some simple hypthesis and also choose which school and
+Our first step was to come up with some simple hypthesis and also choose which school and somehow this can be loaded into R as well if I write it here on the website then it will appear in my local project 
 
 ```{r}
 library(network)
