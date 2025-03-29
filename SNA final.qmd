@@ -4,7 +4,7 @@ title: "SNA final try out local"
 
 ## Introduction
 
-hello
+hello how are you 
 Our first step was to come up with some simple hypthesis and also choose which school and
 
 ```{r}
