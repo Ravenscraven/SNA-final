@@ -1,0 +1,1033 @@
+---
+title: "SNA final try out local"
+---
+
+## Introduction
+
+hello
+Our first step was to come up with some simple hypthesis and also choose which school and
+
+```{r}
+library(network)
+library(networkDynamic)
+library(ndtv)
+library(dplyr)
+
+# Files by Class
+class_lists <- list(
+  "class1" = c("Networks_by_Type/Trustworthy/5100_24_9.csv",
+               "Networks_by_Type/Trustworthy/5100_22_9_2h.csv",
+               "Networks_by_Type/Trustworthy/5100_21_7_3h.csv",
+               "Networks_by_Type/Trustworthy/5100_27_7_4h.csv"),
+  "class4" = c("Networks_by_Type/Trustworthy/5400_24_9.csv",
+               "Networks_by_Type/Trustworthy/5400_22_9_2h.csv",
+               "Networks_by_Type/Trustworthy/5400_21_7_3h.csv",
+               "Networks_by_Type/Trustworthy/5400_27_7_4h.csv"),
+  "class5" = c("Networks_by_Type/Trustworthy/5500_24_9.csv",
+               "Networks_by_Type/Trustworthy/5500_22_9_2h.csv",
+               "Networks_by_Type/Trustworthy/5500_21_7_3h.csv",
+               "Networks_by_Type/Trustworthy/5500_27_7_4h.csv"),
+  "class6" = c("Networks_by_Type/Trustworthy/5600_24_9.csv",
+               "Networks_by_Type/Trustworthy/5600_22_9_2h.csv",
+               "Networks_by_Type/Trustworthy/5600_21_7_3h.csv",
+               "Networks_by_Type/Trustworthy/5600_27_7_4h.csv")
+)
+
+# removing the x from the name of some students
+clean_names <- function(df) {
+  colnames(df) <- gsub("^X", "", colnames(df))
+  rownames(df) <- gsub("^X", "", rownames(df))
+  return(df)
+}
+
+# extracting the wave to now time period
+extract_wave <- function(filename) {
+  if (grepl("_2h\\.csv$", filename)) return(2)
+  if (grepl("_3h\\.csv$", filename)) return(3)
+  if (grepl("_4h\\.csv$", filename)) return(4)
+  return(1)
+}
+
+# processing all files
+all_students <- c()
+edge_data <- list()
+# reading wave, adjacency matrix and node names 
+for (class_name in names(class_lists)) {
+  for (file in class_lists[[class_name]]) {
+    wave <- extract_wave(file)
+    mat <- as.matrix(read.csv(file, row.names = 1))
+    mat <- clean_names(mat)
+    mat[is.na(mat)] <- 0
+# makes sure that all nodes are included    
+    senders <- rownames(mat)
+    receivers <- colnames(mat)
+    all_students <- unique(c(all_students, senders, receivers))
+    
+    edges <- which(mat == 1, arr.ind = TRUE)
+    if (nrow(edges) > 0) {
+      edge_data[[length(edge_data) + 1]] <- data.frame(
+        onset = wave,
+        terminus = wave + 0.99,  # slightly less than next wave
+        tail = senders[edges[,1]],
+        head = receivers[edges[,2]],
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+}
+
+# Creating vertex objects
+# Creating vertex dictionary
+vertex_dict <- data.frame(
+  vertex.names = sort(unique(all_students)),
+  vertex.id = seq_along(unique(all_students)),
+  stringsAsFactors = FALSE
+)
+
+# Creating base network
+net <- network.initialize(
+  n = nrow(vertex_dict),
+  directed = TRUE
+)
+
+# Setting vertex attributes after creation
+network::set.vertex.attribute(net, "vertex.names", vertex_dict$vertex.names)
+network::set.vertex.attribute(net, "class", substr(vertex_dict$vertex.names, 2, 2))
+
+# Converts edge data to numeric IDs
+edges_final <- do.call(rbind, edge_data)
+edges_final$tail_id <- match(edges_final$tail, vertex_dict$vertex.names)
+edges_final$head_id <- match(edges_final$head, vertex_dict$vertex.names)
+
+# Dynamic Network
+
+edges_final$terminus <- pmin(edges_final$onset + 0.99, 4)  # Cap at wave 4 (NO workk why)
+
+dyn_net <- networkDynamic(
+  base.net = net,
+  edge.spells = edges_final[, c("onset", "terminus", "tail_id", "head_id")],
+  create.TEAs = TRUE,
+  vertex.pid = "vertex.names",
+  net.obs.period = list(
+    observations = list(c(1, 4)),  # Exactly 4 waves (doesn´t work whyyyy)
+    mode = "discrete",
+    time.increment = 1,
+    time.unit = "wave"
+  )
+)
+
+
+# Visualization Setup
+# Vertex colors
+class_colors <- c("1" = "red", "4" = "blue", "5" = "green", "6" = "purple")
+vertex_colors <- class_colors[network::get.vertex.attribute(dyn_net, "class")]
+network::set.vertex.attribute(dyn_net, "color", vertex_colors)
+
+# Computing animation
+compute.animation(
+  dyn_net,
+  animation.mode = "kamadakawai",  # Better for small networks
+  slice.par = list(
+    start = 1,
+    end = 5,
+    interval = 1,
+    aggregate.dur = 1,
+    rule = "any"
+  )
+)
+
+# 7. Render Animation :D
+render.d3movie(
+  dyn_net,
+  displaylabels = TRUE,
+  vertex.col = "color",
+  vertex.cex = 0.8,
+  edge.lwd = 0.5,
+  label.cex = 0.6,
+  output.mode = "htmlWidget"  
+)
+```
+
+```{r}
+
+```
+
+```{r}
+library(dplyr)
+library(purrr)
+
+# Read attribute data
+attribute_data <- read.csv("CodebooksAttributeData/RECENS_students_dataset_w1234.csv")
+
+# Function to process each class file
+process_class_files <- function(class_files, class_name) {
+  map_dfr(class_files, function(file_path) {
+    # Read the network file (assuming no header and first column is idcode)
+    wave_data <- read.csv(file_path, header = FALSE)
+    colnames(wave_data)[1] <- "idcode"
+    
+    # Determine wave number from filename
+    wave <- ifelse(grepl("_2h", file_path), 2,
+                  ifelse(grepl("_3h", file_path), 3,
+                         ifelse(grepl("_4h", file_path), 4, 1)))
+    
+    # Merge with attribute data
+    merged_data <- wave_data %>% 
+      select(idcode) %>% 
+      left_join(attribute_data %>% 
+                 select(idcode, frontpg_1, frontpg_2),
+               by = "idcode")
+    
+    # Calculate means
+    means <- merged_data %>% 
+      summarise(
+        wave = wave,
+        class = class_name,
+        mean_frontpg_1 = mean(frontpg_1, na.rm = TRUE),
+        mean_frontpg_2 = mean(frontpg_2, na.rm = TRUE),
+        n_students = n_distinct(idcode)
+      )
+    
+    return(means)
+  })
+}
+
+# Process all classes
+results <- imap_dfr(class_lists, ~ process_class_files(.x, .y))
+
+# View results
+print(results)
+
+# Optional: Save results to CSV
+write.csv(results, "class_wave_frontpg_means.csv", row.names = FALSE)
+```
+
+any id's with quality 3 or 4
+
+```{r}
+# Load attribute data
+attribute_data <- read.csv("CodebooksAttributeData/RECENS_students_dataset_w1234.csv")
+
+# Filter for School 5, classes 1,4,5,6 and identify high scorers
+high_scorers <- attribute_data %>%
+  mutate(
+    school = substr(idcode, 1, 1),
+    class = substr(idcode, 2, 2)
+  ) %>%
+  filter(school == "5", 
+         class %in% c("1", "4", "5", "6"),
+         (frontpg_1 >= 3 | frontpg_2 >= 3)) %>%  # Scores of 3 or 4
+  select(idcode, class, frontpg_1, frontpg_2) %>%
+  arrange(class, idcode)
+
+# Create separate lists for each score threshold
+scorers_3_or_4 <- high_scorers %>%
+  filter(frontpg_1 >= 3 | frontpg_2 >= 3)
+
+scorers_4 <- high_scorers %>%
+  filter(frontpg_1 == 4 | frontpg_2 == 4)
+
+# Print results
+cat("Students with frontpg_1 or frontpg_2 scores of 3 or 4:\n")
+if(nrow(scorers_3_or_4) > 0) {
+  knitr::kable(scorers_3_or_4, 
+               col.names = c("ID", "Class", "Frontpg 1", "Frontpg 2"))
+} else {
+  cat("No students found with scores ≥3\n")
+}
+
+cat("\nStudents with frontpg_1 or frontpg_2 scores of exactly 4:\n")
+if(nrow(scorers_4) > 0) {
+  knitr::kable(scorers_4, 
+               col.names = c("ID", "Class", "Frontpg 1", "Frontpg 2"))
+} else {
+  cat("No students found with scores =4\n")
+}
+
+# Optional: Save to CSV
+write.csv(scorers_3_or_4, "high_scorers_3_or_4.csv", row.names = FALSE)
+write.csv(scorers_4, "high_scorers_4.csv", row.names = FALSE)
+```
+
+In class 5 we find a few ID's for which the the quality number is low but none where both reviewers agree on a 3 or 4 rating so no exclusion is needed.
+
+```{r}
+# Helper function for single class animations below
+
+# processes class files
+process_class_files <- function(file_list) {
+  all_students <- c()
+  edge_data <- list()
+  
+  for (file in file_list) {
+    wave <- ifelse(grepl("_2h\\.csv$", file), 2,
+                  ifelse(grepl("_3h\\.csv$", file), 3,
+                        ifelse(grepl("_4h\\.csv$", file), 4, 1)))
+    
+    mat <- as.matrix(read.csv(file, row.names = 1))
+    colnames(mat) <- gsub("^X", "", colnames(mat))
+    mat[is.na(mat)] <- 0
+    
+    senders <- rownames(mat)
+    receivers <- colnames(mat)
+    all_students <- unique(c(all_students, senders, receivers))
+    
+    edges <- which(mat == 1, arr.ind = TRUE)
+    if (nrow(edges) > 0) {
+      edge_data[[length(edge_data) + 1]] <- data.frame(
+        onset = wave,
+        terminus = wave + 0.99,
+        tail = senders[edges[,1]],
+        head = receivers[edges[,2]],
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  
+  vertices <- data.frame(
+    vertex.names = sort(unique(all_students)),
+    vertex.id = seq_along(unique(all_students)),
+    stringsAsFactors = FALSE
+  )
+  
+  edges_final <- do.call(rbind, edge_data)
+  edges_final$tail_id <- match(edges_final$tail, vertices$vertex.names)
+  edges_final$head_id <- match(edges_final$head, vertices$vertex.names)
+  
+  return(list(edges = edges_final, vertices = vertices))
+}
+
+create_temporal_network <- function(edges, vertices) {
+  # Create base network
+  net <- network.initialize(
+    n = nrow(vertices),
+    directed = TRUE
+  )
+  
+  # Add vertex attributes
+  network::set.vertex.attribute(net, "vertex.names", vertices$vertex.names)
+  
+  # Create dynamic network
+  networkDynamic(
+    base.net = net,
+    edge.spells = edges[, c("onset", "terminus", "tail_id", "head_id")],
+    vertex.pid = "vertex.names",
+    net.obs.period = list(
+      observations = list(c(1, 4)),
+      mode = "discrete",
+      time.increment = 1,
+      time.unit = "wave"
+    )
+  )
+}
+
+# Function to compute and assign a fixed layout
+set_fixed_layout <- function(net) {
+  base_net <- as.network(net)  # Convert to a static network
+  
+  # Compute layout using gplot()
+  layout_fixed <- gplot(base_net, 
+                       usearrows = FALSE, 
+                       displaylabels = FALSE, 
+                       mode = "kamadakawai", 
+                       pad = 0.2)
+  
+  # Assign fixed coordinates to vertex attributes
+  network::set.vertex.attribute(net, "x", layout_fixed[, 1])
+  network::set.vertex.attribute(net, "y", layout_fixed[, 2])
+  
+  # Also set these in the base network for good measure
+  network::set.vertex.attribute(base_net, "x", layout_fixed[, 1])
+  network::set.vertex.attribute(base_net, "y", layout_fixed[, 2])
+  
+  return(layout_fixed)
+}
+
+```
+
+Class 1 single animated
+
+```{r}
+
+# Class 1 files
+class1_files <- c("Networks_by_Type/Trustworthy/5100_24_9.csv",
+                 "Networks_by_Type/Trustworthy/5100_22_9_2h.csv",
+                 "Networks_by_Type/Trustworthy/5100_21_7_3h.csv",
+                 "Networks_by_Type/Trustworthy/5100_27_7_4h.csv")
+
+class1_data <- process_class_files(class1_files)
+class1_net <- create_temporal_network(class1_data$edges, class1_data$vertices)
+
+# vertex attributes
+network::set.vertex.attribute(class1_net, "color", "red")
+
+# animation
+compute.animation(
+  class1_net,
+  animation.mode = "kamadakawai",
+  slice.par = list(
+    start = 1,
+    end = 4,
+    interval = 1,
+    aggregate.dur = 1,
+    rule = "any"
+  )
+)
+
+render.d3movie(
+  class1_net,
+  displaylabels = TRUE,
+  vertex.col = "color",
+  vertex.cex = 0.8,
+  edge.lwd = 0.5,
+  label.cex = 0.6,
+  main = "Class 1 Trustworthy Network",
+  output.mode = "htmlWidget"
+)
+
+```
+
+```{r}
+
+
+# Class 4 files
+class4_files <- c("Networks_by_Type/Trustworthy/5400_24_9.csv",
+                 "Networks_by_Type/Trustworthy/5400_22_9_2h.csv",
+                 "Networks_by_Type/Trustworthy/5400_21_7_3h.csv",
+                 "Networks_by_Type/Trustworthy/5400_27_7_4h.csv")
+
+class4_data <- process_class_files(class4_files)
+class4_net <- create_temporal_network(class4_data$edges, class4_data$vertices)
+
+# vertex attributes
+network::set.vertex.attribute(class4_net, "color", "blue")
+
+# animation
+compute.animation(
+  class4_net,
+  animation.mode = "kamadakawai",
+  slice.par = list(
+    start = 1,
+    end = 4,
+    interval = 1,
+    aggregate.dur = 1,
+    rule = "any"
+  )
+)
+
+render.d3movie(
+  class4_net,
+  displaylabels = TRUE,
+  vertex.col = "color",
+  vertex.cex = 0.8,
+  edge.lwd = 0.5,
+  label.cex = 0.6,
+  main = "Class 4 Trustworthy Network",
+  output.mode = "htmlWidget"
+)
+
+
+```
+
+```{r}
+
+
+
+# Class 5 files
+class5_files <- c("Networks_by_Type/Trustworthy/5500_24_9.csv",
+               "Networks_by_Type/Trustworthy/5500_22_9_2h.csv",
+               "Networks_by_Type/Trustworthy/5500_21_7_3h.csv",
+               "Networks_by_Type/Trustworthy/5500_27_7_4h.csv")
+
+class5_data <- process_class_files(class5_files)
+class5_net <- create_temporal_network(class5_data$edges, class5_data$vertices)
+
+# vertex attributes
+network::set.vertex.attribute(class5_net, "color", "green")
+
+# animation
+compute.animation(
+  class5_net,
+  animation.mode = "kamadakawai",
+  slice.par = list(
+    start = 1,
+    end = 4,
+    interval = 1,
+    aggregate.dur = 1,
+    rule = "any"
+  )
+)
+
+render.d3movie(
+  class5_net,
+  displaylabels = TRUE,
+  vertex.col = "color",
+  vertex.cex = 0.8,
+  edge.lwd = 0.5,
+  label.cex = 0.6,
+  main = "Class 5 Trustworthy Network",
+  output.mode = "htmlWidget"
+)
+
+```
+
+```{r}
+
+
+# Class 6 files
+class6_files <- c("Networks_by_Type/Trustworthy/5600_24_9.csv",
+                 "Networks_by_Type/Trustworthy/5600_22_9_2h.csv",
+                 "Networks_by_Type/Trustworthy/5600_21_7_3h.csv",
+                 "Networks_by_Type/Trustworthy/5600_27_7_4h.csv")
+
+class6_data <- process_class_files(class6_files)
+class6_net <- create_temporal_network(class6_data$edges, class6_data$vertices)
+
+# vertex attributes
+network::set.vertex.attribute(class6_net, "color", "purple")
+
+# animation
+compute.animation(
+  class6_net,
+  animation.mode = "kamadakawai",
+  slice.par = list(
+    start = 1,
+    end = 4,
+    interval = 1,
+    aggregate.dur = 1,
+    rule = "any"
+  )
+)
+
+render.d3movie(
+  class6_net,
+  displaylabels = TRUE,
+  vertex.col = "color",
+  vertex.cex = 0.8,
+  edge.lwd = 0.5,
+  label.cex = 0.6,
+  main = "Class 6 Trustworthy Network",
+  output.mode = "htmlWidget"
+)
+```
+
+In the lectures we learned that it's important that states correspond to ev and that networks should be somewhat stable to be suitable for SAOM type analysis.
+
+To check the the stability of the networks we should therefore conduct a Hamming distance analysis - which indicates how many small steps are needed to reach the second network from first as well as the Jaccard index - which shows what percentage share of ties spears more than once among observed ties, therefore indicating how stable the network is.
+
+```{r}
+
+# Distance functions
+Hamming <- function(net1, net2) {
+  m1 <- as.matrix(net1, matrix.type = "adjacency")
+  m2 <- as.matrix(net2, matrix.type = "adjacency")
+  sum(m1 != m2)
+}
+
+Jaccard <- function(net1, net2) {
+  m1 <- as.matrix(net1, matrix.type = "adjacency")
+  m2 <- as.matrix(net2, matrix.type = "adjacency")
+  intersection <- sum(m1 & m2)
+  union <- sum(m1 | m2)
+  if (union == 0) return(NA) else return(1 - (intersection/union))
+}
+
+# Function to analyze a single class
+analyze_class <- function(class_net, class_name) {
+  # Extract networks for each wave
+  waves <- lapply(1:4, function(w) {
+    network.extract(class_net, onset = w, terminus = w + 1)
+  })
+  
+  # Initialize distance matrices
+  hamming <- matrix(0, nrow = 4, ncol = 4)
+  jaccard <- matrix(0, nrow = 4, ncol = 4)
+  
+  # Calculate all pairwise distances
+  for (i in 1:4) {
+    for (j in 1:4) {
+      hamming[i,j] <- Hamming(waves[[i]], waves[[j]])
+      jaccard[i,j] <- Jaccard(waves[[i]], waves[[j]])
+    }
+  }
+  
+  # Return results
+  list(
+    class = class_name,
+    hamming = hamming,
+    jaccard = jaccard,
+    mean_hamming = mean(hamming[lower.tri(hamming)]),
+    mean_jaccard = mean(jaccard[lower.tri(jaccard)], na.rm = TRUE)
+  )
+}
+
+# Process all classes
+class_results <- list(
+  "Class1" = analyze_class(class1_net, "Class 1"),
+  "Class4" = analyze_class(class4_net, "Class 4"),
+  "Class5" = analyze_class(class5_net, "Class 5"),
+  "Class6" = analyze_class(class6_net, "Class 6")
+)
+
+# Summary table
+summary_table <- data.frame(
+  Class = c("Class 1", "Class 4", "Class 5", "Class 6"),
+  Mean_Hamming = sapply(class_results, function(x) x$mean_hamming),
+  Mean_Jaccard = sapply(class_results, function(x) x$mean_jaccard),
+  Hamming_1_to_4 = sapply(class_results, function(x) x$hamming[1,4]),
+  Jaccard_1_to_4 = sapply(class_results, function(x) x$jaccard[1,4])
+)
+
+# Print results
+cat("Distance Metric Summary:\n")
+print(summary_table)
+
+# Visualization
+par(mfrow = c(4, 2), mar = c(4,4,2,1))
+for (class in names(class_results)) {
+  # Hamming distance heatmap
+  image(class_results[[class]]$hamming, 
+        main = paste(class, "Hamming Distances"),
+        xlab = "Wave", ylab = "Wave")
+  
+  # Jaccard distance heatmap
+  image(class_results[[class]]$jaccard, 
+        main = paste(class, "Jaccard Distances"),
+        xlab = "Wave", ylab = "Wave")
+}
+```
+
+```{r}
+# Function to analyze each wave in detail
+analyze_waves <- function(class_net, class_name) {
+  # Initialize results list
+  results <- list()
+  
+  # Extract networks for each wave
+  waves <- lapply(1:4, function(w) {
+    network.extract(class_net, onset = w, terminus = w + 1)
+  })
+  
+  # Calculate pairwise dist between consecutive waves
+  results$distances <- data.frame(
+    comparison = c("Wave1-Wave2", "Wave2-Wave3", "Wave3-Wave4"),
+    hamming = c(
+      Hamming(waves[[1]], waves[[2]]),
+      Hamming(waves[[2]], waves[[3]]),
+      Hamming(waves[[3]], waves[[4]])
+    ),
+    jaccard = c(
+      Jaccard(waves[[1]], waves[[2]]),
+      Jaccard(waves[[2]], waves[[3]]),
+      Jaccard(waves[[3]], waves[[4]])
+    )
+  )
+  
+  # Calculate network statis for each wave
+  results$wave_stats <- lapply(1:4, function(w) {
+    net <- waves[[w]]
+    list(
+      density = network.density(net),
+      outdegree = summary(sna::degree(net, cmode = "outdegree"))
+    )
+  })
+  
+  # Return formatted results
+  list(
+    class_name = class_name,
+    distances = results$distances,
+    wave_stats = results$wave_stats
+  )
+}
+
+# Function to print formatted results
+print_results <- function(analysis) {
+  cat(paste0("\n=========== Analysis Results: ", analysis$class_name, " ===========\n\n"))
+  
+  # Print distance metrics
+  for (i in 1:nrow(analysis$distances)) {
+    cat(paste0(analysis$distances$comparison[i], ":\n"))
+    cat(paste0("Hamming distance = ", analysis$distances$hamming[i], " \n"))
+    cat(paste0("Jaccard index = ", analysis$distances$jaccard[i], " \n\n"))
+  }
+  
+  # Print wave statistics
+  for (w in 1:4) {
+    cat(paste0("Network density in Wave ", w, ": ", analysis$wave_stats[[w]]$density, " \n"))
+    cat(paste0("Outdegree summary for Wave ", w, ":\n"))
+    print(analysis$wave_stats[[w]]$outdegree)
+    cat("\n")
+  }
+}
+
+# Analyze all classes
+class_analyses <- list(
+  analyze_waves(class1_net, "Class 5100"),
+  analyze_waves(class4_net, "Class 5400"),
+  analyze_waves(class5_net, "Class 5500"),
+  analyze_waves(class6_net, "Class 5600")
+)
+
+# Print results for all classes
+lapply(class_analyses, print_results)
+
+# Create a consolidated data frame (like your example)
+results_df <- do.call(rbind, lapply(class_analyses, function(x) {
+  data.frame(
+    class_name = x$class_name,
+    h12 = x$distances$hamming[1],
+    j12 = x$distances$jaccard[1],
+    h23 = x$distances$hamming[2],
+    j23 = x$distances$jaccard[2],
+    h34 = x$distances$hamming[3],
+    j34 = x$distances$jaccard[3],
+    density_w1 = x$wave_stats[[1]]$density,
+    density_w2 = x$wave_stats[[2]]$density,
+    density_w3 = x$wave_stats[[3]]$density,
+    density_w4 = x$wave_stats[[4]]$density
+  )
+}))
+
+# View the consolidated data frame
+View(results_df)
+```
+
+network visualisation 1
+
+```{r}
+library(igraph)
+library(ggraph)
+library(tidygraph)
+library(ggplot2)
+library(gridExtra)
+
+# 1. Robust data preparation
+prepare_class_data <- function() {
+  class_files <- c("Networks_by_Type/Trustworthy/5500_24_9.csv",
+                  "Networks_by_Type/Trustworthy/5500_22_9_2h.csv",
+                  "Networks_by_Type/Trustworthy/5500_21_7_3h.csv",
+                  "Networks_by_Type/Trustworthy/5500_27_7_4h.csv")
+  
+  # Read all matrices and collect all nodes
+  all_nodes <- unique(unlist(lapply(class_files, function(file) {
+    mat <- as.matrix(read.csv(file, row.names = 1))
+    colnames(mat) <- gsub("^X", "", colnames(mat))
+    rownames(mat) <- gsub("^X", "", rownames(mat))
+    mat[is.na(mat)] <- 0
+    unique(c(rownames(mat), colnames(mat)))
+  })))
+  
+  # Create consistent matrices for each wave
+  waves <- lapply(class_files, function(file) {
+    mat <- as.matrix(read.csv(file, row.names = 1))
+    colnames(mat) <- gsub("^X", "", colnames(mat))
+    rownames(mat) <- gsub("^X", "", rownames(mat))
+    mat[is.na(mat)] <- 0
+    
+    full_mat <- matrix(0, nrow = length(all_nodes), ncol = length(all_nodes),
+                      dimnames = list(all_nodes, all_nodes))
+    common_rows <- intersect(rownames(mat), all_nodes)
+    common_cols <- intersect(colnames(mat), all_nodes)
+    full_mat[common_rows, common_cols] <- mat[common_rows, common_cols]
+    full_mat
+  })
+  
+  names(waves) <- paste0("Wave", 1:4)
+  return(list(waves = waves, all_nodes = all_nodes))
+}
+
+# 2. Get network data
+class_data <- prepare_class_data()
+waves <- class_data$waves
+all_nodes <- class_data$all_nodes
+
+# 3. Create stable layout
+combined_net <- Reduce("+", lapply(waves, function(x) {
+  x[x > 0] <- 1
+  x
+}))
+g_full <- graph_from_adjacency_matrix(combined_net, mode = "directed")
+set.seed(123)
+layout_pos <- layout_with_fr(g_full)
+rownames(layout_pos) <- all_nodes
+
+# 4. Final plotting function (guaranteed to work)
+plot_wave <- function(wave_matrix, wave_label) {
+  # Get active nodes (non-zero rows or columns)
+  active_nodes <- unique(c(
+    rownames(wave_matrix)[rowSums(wave_matrix) > 0],
+    colnames(wave_matrix)[colSums(wave_matrix) > 0]
+  ))
+  
+  if(length(active_nodes) == 0) {
+    return(ggplot() + 
+             annotate("text", x = 0.5, y = 0.5, label = "No connections") + 
+             theme_void() +
+             ggtitle(wave_label))
+  }
+  
+  # Create subgraph
+  sub_mat <- wave_matrix[active_nodes, active_nodes, drop = FALSE]
+  g <- graph_from_adjacency_matrix(sub_mat, mode = "directed")
+  
+  # Calculate out-degree CORRECTLY
+  out_degree <- colSums(sub_mat)  # For directed graphs, out-degree is column sums
+  
+  # Prepare plot data
+  plot_data <- data.frame(
+    name = active_nodes,
+    x = layout_pos[active_nodes, 1],
+    y = layout_pos[active_nodes, 2],
+    outdegree = out_degree
+  )
+  
+  # Create edges data
+  edges <- as.data.frame(get.edgelist(g))
+  colnames(edges) <- c("from", "to")
+  edges <- merge(edges, plot_data[, c("name", "x")], by.x = "from", by.y = "name")
+  edges <- merge(edges, plot_data[, c("name", "y")], by.x = "from", by.y = "name")
+  edges <- merge(edges, plot_data[, c("name", "x")], by.x = "to", by.y = "name", suffixes = c("", ".to"))
+  edges <- merge(edges, plot_data[, c("name", "y")], by.x = "to", by.y = "name", suffixes = c("", ".to"))
+  
+  # Create plot
+  ggplot(plot_data, aes(x = x, y = y)) +
+    geom_segment(data = edges, 
+                aes(x = x, y = y, xend = x.to, yend = y.to),
+                arrow = arrow(length = unit(3, 'mm')), 
+                color = "gray60") +
+    geom_point(aes(size = outdegree, color = outdegree)) +
+    geom_text(aes(label = name), vjust = 1.8, size = 3) +
+    scale_color_viridis_c() +
+    ggtitle(wave_label) +
+    theme_void() +
+    coord_cartesian(
+      xlim = range(layout_pos[,1]) * 1.1,
+      ylim = range(layout_pos[,2]) * 1.1
+    ) +
+    guides(size = "none")
+}
+
+# 5. Generate and display plots
+p1 <- plot_wave(waves$Wave1, "Wave 1")
+p2 <- plot_wave(waves$Wave2, "Wave 2")
+p3 <- plot_wave(waves$Wave3, "Wave 3")
+p4 <- plot_wave(waves$Wave4, "Wave 4")
+
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+```
+
+
+hypothesis 1
+
+```{r}
+process_all_networks <- function(class_number) {
+  base_path <- "Networks_by_Type/"
+  
+
+
+  # Helper function to find files with complete pattern matching
+  get_network_files <- function(subfolder) {
+    full_path <- paste0(base_path, subfolder, "/")
+    if (!dir.exists(full_path)) {
+      stop(paste("Subdirectory not found:", full_path))
+    }
+    
+    files <- list.files(full_path, pattern = "^5500_.*\\.csv$", full.names = TRUE)
+    if (length(files) == 0) {
+      stop(paste("No matching files found in:", full_path))
+    }
+    return(files)
+  }
+
+  # Process each network type (keeping original object names)
+  trust_data <- process_class_files(get_network_files("Trustworthy"))
+  friend_data <- process_class_files(get_network_files("Good_friend"))
+  dislike_data <- process_class_files(get_network_files("Dislike_hate"))
+
+  return(list(
+    trust = trust_data,
+    friendship = friend_data,
+    dislike = dislike_data
+  ))
+}
+
+# Process all network types for Class 5 
+class5_all <- process_all_networks(5)
+
+ #network arrays for RSiena
+create_network_arrays <- function(net_data) {
+  # Get all unique students across waves
+  all_students <- sort(unique(net_data$vertices$vertex.names))
+  n_students <- length(all_students)
+  
+  # Initialize empty arrays for each wave
+  wave1 <- wave2 <- wave3 <- wave4 <- 
+    matrix(0, nrow = n_students, ncol = n_students,
+           dimnames = list(all_students, all_students))
+  
+  # Fill in each wave's matrix
+  for (wave in 1:4) {
+    wave_edges <- net_data$edges[net_data$edges$onset == wave, ]
+    current_matrix <- get(paste0("wave", wave))
+    
+    if (nrow(wave_edges) > 0) {
+      for (i in 1:nrow(wave_edges)) {
+        sender <- wave_edges$tail[i]
+        receiver <- wave_edges$head[i]
+        current_matrix[sender, receiver] <- 1
+      }
+    }
+    
+    assign(paste0("wave", wave), current_matrix)
+  }
+  
+  return(list(wave1, wave2, wave3, wave4))
+}
+
+# Create network arrays for each type
+trust_arrays <- create_network_arrays(class5_all$trust)
+friendship_arrays <- create_network_arrays(class5_all$friendship)
+dislike_arrays <- create_network_arrays(class5_all$dislike)
+
+ # Prepare gender attribute
+prepare_gender <- function(vertex_names, attribute_data) {
+  # Get gender for each wave
+  gender_w1 <- attribute_data$gender_1[match(vertex_names, attribute_data$idcode)]
+  gender_w2 <- attribute_data$gender_2[match(vertex_names, attribute_data$idcode)]
+  gender_w3 <- attribute_data$gender_3[match(vertex_names, attribute_data$idcode)]
+  gender_w4 <- attribute_data$gender_4[match(vertex_names, attribute_data$idcode)]
+  
+  # Combine into matrix (students x waves)
+  gender_matrix <- cbind(gender_w1, gender_w2, gender_w3, gender_w4)
+  rownames(gender_matrix) <- vertex_names
+  
+  return(gender_matrix)
+}
+
+vertex_names <- class5_all$trust$vertices$vertex.names
+gender_matrix <- prepare_gender(vertex_names, attribute_data)
+```
+
+```{r}
+library(RSiena)
+
+# 1. Create dependent variable (trust) - 3 waves
+trust <- sienaDependent(
+  array(data = c(trust_arrays[[1]], trust_arrays[[2]], trust_arrays[[3]]),
+        dim = c(length(vertex_names), length(vertex_names), 3))
+)
+
+# 2. Create dyadic covariates - 2 waves each
+friendship <- varDyadCovar(
+  array(data = c(friendship_arrays[[1]], friendship_arrays[[2]]),
+        dim = c(length(vertex_names), length(vertex_names), 2))
+)
+
+dislike <- varDyadCovar(
+  array(data = c(dislike_arrays[[1]], dislike_arrays[[2]]),
+        dim = c(length(vertex_names), length(vertex_names), 2))
+)
+
+# 3. Create nodal covariate (gender)
+gender <- varCovar(gender_matrix[,1:3]) # Time-varying
+# OR if time-constant: gender <- coCovar(gender_matrix[,1])
+
+# 4. Combine into RSiena dataset
+siena_data <- sienaDataCreate(trust, friendship, dislike, gender)
+```
+
+```{r}
+
+# Get basic effects
+my_effects <- getEffects(siena_data)
+
+# Add effects to test hypotheses:
+# 1. High transitivity in trust network
+my_effects <- includeEffects(my_effects, transTrip, transRecTrip)
+
+# 2. Friendship leads to more trust
+my_effects <- includeEffects(my_effects, X, interaction1 = "friendship")
+
+# 3. Disruption of transitivity through dislike
+# This would be a three-way interaction between trust, trust, and dislike
+# RSiena doesn't have this built-in, but we can approximate with:
+my_effects <- includeEffects(my_effects, density, interaction1 = "dislike")
+my_effects <- includeEffects(my_effects, simX, interaction1 = "dislike")
+
+# Add some basic structural effects
+my_effects <- includeEffects(my_effects, density, recip, cycle3)
+
+# Add gender effects
+my_effects <- includeEffects(my_effects, egoX, altX, sameX, interaction1 = "gender")
+
+# Inspect the effects
+print(my_effects)
+```
+
+```{r}
+# Create estimation algorithm
+my_algorithm <- sienaAlgorithmCreate(projname = "class5_trust", seed = 12345)
+
+# Estimate the model
+my_results <- siena07(my_algorithm, data = siena_data, effects = my_effects)
+
+# Inspect results
+print(my_results)
+
+# Create HTML table of results
+siena.table(my_results, type = "html", tstat = TRUE, sig = TRUE, d = 2)
+browseURL("my_results.html")
+```
+
+1.  confirmed and signi
+2.  confirmed and sign
+
+```{r}
+# effect 3 no work attempted fix nor wok
+print(siena_data)
+
+
+
+my_effects <- getEffects(siena_data)
+
+# 1. Transitivity in trust network (hypothesis 1)
+my_effects <- includeEffects(my_effects, transTrip, transRecTrip)
+
+# 2. Friendship effect (hypothesis 2)
+my_effects <- includeEffects(my_effects, X, interaction1 = "friendship")
+
+# 3. Dislike effects (hypothesis 3)
+# These are the key effects to test disruption of transitivity:
+my_effects <- includeEffects(my_effects, 
+                           X, interaction1 = "dislike") # Main effect of dislike
+                           
+my_effects <- includeInteraction(my_effects,
+                                transTrip, X, 
+                                interaction1 = c("", "dislike"),
+                                name = "trust") # Dislike disrupting transitivity
+
+my_effects <- includeInteraction(my_effects,
+                                transRecTrip, X,
+                                interaction1 = c("", "dislike"),
+                                name = "trust") # Dislike disrupting recip. transitivity
+
+# Basic structural effects
+my_effects <- includeEffects(my_effects, density, recip, cycle3)
+
+# Gender effects
+my_effects <- includeEffects(my_effects, egoX, altX, sameX, interaction1 = "gender")
+
+# Print to verify all effects are there
+print(my_effects)
+
+```
+
+```{r}
+
+```
+
+hypothesis 2 -
+
+good friendship enhances trust
+
+example v
