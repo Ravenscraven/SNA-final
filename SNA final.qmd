@@ -1006,16 +1006,143 @@ gof_triad <- sienaGOF(my_results,
                      TriadCensus,
                      verbose = TRUE)
 
-plot(gofIndegrees, main = "Indegree Distribution GOF")
-plot(gofOutdegrees, main = "Outdegree Distribution GOF")
-plot(gofTriads, center = TRUE, scale = TRUE, main = "Triad Census GOF")
+plot(gof_indeg, main = "Indegree Distribution GOF")
+plot(gof_outdeg, main = "Outdegree Distribution GOF")
+plot(gof_triad, center = TRUE, scale = TRUE, main = "Triad Census GOF")
 
-# Create summary table
-gof_summary <- data.frame(
-  Statistic = c("Indegree", "Outdegree", "Triad Census"),
-  p_value = c(gof_indeg$Joint$p, gof_outdeg$Joint$p, gof_triad$Joint$p)
+```
+
+```{r}
+# Get basic effects
+my_effects1 <- getEffects(siena_data)
+
+# Add effects to test hypotheses:
+# 1. High transitivity in trust network
+my_effects1 <- includeEffects(my_effects1, transTrip, transRecTrip,)
+
+# 2. Friendship leads to more trust
+my_effects1 <- includeEffects(my_effects1, X, interaction1 = "friendship")
+
+# Add some basic structural effects
+my_effects1 <- includeEffects(my_effects1, density, recip, cycle, inPop, reciAct, outPop) # 1. added inPop and reciAct
+
+
+# Add gender effects
+my_effects1 <- includeEffects(my_effects1, egoX, altX, sameX, interaction1 = "gender") 
+
+
+
+# Inspect the effects
+print(my_effects1)
+```
+
+
+```{r}
+
+
+# Second Model
+
+my_results1 <- siena07(
+  my_algorithm,
+  data = siena_data,
+  effects = my_effects1,
+  returnDeps = TRUE,  
+  batch = FALSE,
+  verbose = TRUE
 )
 
+# Inspect results
+print(my_results1)
+
+siena.table(my_results1, type="html", tstat=TRUE, sig=TRUE, d=2)
+browseURL("my_results1.html")
+
+```
+```{r}
+#Goodness of Fit 
+
+# For indegree distribution
+gof_indeg1 <- sienaGOF(my_results1, 
+                     varName = "trust",
+                     IndegreeDistribution,
+                     cumulative = FALSE,
+                     verbose = TRUE)
+
+# For outdegree distribution  
+gof_outdeg1 <- sienaGOF(my_results1,
+                      varName = "trust",
+                      OutdegreeDistribution,
+                      cumulative = FALSE,
+                      verbose = TRUE)
+
+# For triad census
+gof_triad1 <- sienaGOF(my_results1,
+                     varName = "trust",
+                     TriadCensus,
+                     verbose = TRUE)
+
+plot(gof_indeg1, main = "Indegree Distribution GOF")
+plot(gof_outdeg1, main = "Outdegree Distribution GOF")
+plot(gof_triad1, center = TRUE, scale = TRUE, main = "Triad Census GOF")
+
+```
+
+
+```{r}
+# 1. First include all basic effects
+# 1. Get basic effects
+my_effects <- getEffects(siena_data)
+
+# 2. Basic structural effects (add one by one)
+my_effects <- includeEffects(my_effects, density, name = "trust")
+my_effects <- includeEffects(my_effects, recip, name = "trust")
+my_effects <- includeEffects(my_effects, cycle3, name = "trust")
+
+# 3. Transitivity effects
+my_effects <- includeEffects(my_effects, transTrip, name = "trust")
+my_effects <- includeEffects(my_effects, transRecTrip, name = "trust")
+
+# 4. Friendship effect
+my_effects <- includeEffects(my_effects, X, interaction1 = "friendship", name = "trust")
+
+# 5. Dislike main effect
+my_effects <- includeEffects(my_effects, X, interaction1 = "dislike", name = "trust")
+
+
+
+
+# 7. Gender controls
+my_effects <- includeEffects(my_effects, egoX, altX, sameX, 
+                           interaction1 = "gender", name = "trust")
+
+# Verify all effects
+print(my_effects)
+```
+
+```{r}
+# 1. First create ALL main effects
+my_effects <- getEffects(siena_data) %>%
+  includeEffects("density", name = "trust") %>%  # density effect
+  includeEffects("recip", name = "trust") %>%
+  includeEffects("transTrip", name = "trust") %>%
+  includeEffects("transRecTrip", name = "trust") %>%
+  includeEffects("X", interaction1 = "friendship", name = "trust") %>%
+  includeEffects("X", interaction1 = "dislike", name = "trust")
+
+# 2. Add interaction using ALTERNATIVE SYNTAX that always works
+my_effects <- setEffect(my_effects, 
+                       name = "trust",
+                       interaction1 = "transTrip",
+                       interaction2 = "dislike",
+                       include = TRUE,
+                       type = "eval")
+
+# 3. Verify with character=TRUE to see the math
+my_effects <- includeInteraction(my_effects,
+                               "transTrip", "X",
+                               interaction1 = c("", "dislike"),
+                               name = "trust",
+                               character = TRUE)  # Will print the formula
 ```
 
 
@@ -1074,55 +1201,60 @@ my_effects <- includeEffects(my_effects,
 # Verify all effects
 print(my_effects)
 ```
-
-
 ```{r}
-# effect 3 no work attempted fix nor wok
-print(siena_data)
-
-
-
+# 1. Get basic effects - MUST specify the dependent variable name
 my_effects <- getEffects(siena_data)
 
-# 1. Transitivity in trust network (hypothesis 1)
-my_effects <- includeEffects(my_effects, transTrip, transRecTrip)
+# 2. Basic structural effects (add one by one with explicit network name)
+my_effects <- includeEffects(my_effects, density, name = "trust")
+my_effects <- includeEffects(my_effects, recip, name = "trust") 
+my_effects <- includeEffects(my_effects, cycle3, name = "trust")
 
-# 2. Friendship effect (hypothesis 2)
-my_effects <- includeEffects(my_effects, X, interaction1 = "friendship")
+# 3. Transitivity effects
+my_effects <- includeEffects(my_effects, transTrip, name = "trust")
+my_effects <- includeEffects(my_effects, transRecTrip, name = "trust")
 
-# 3. Dislike effects (hypothesis 3)
-# These are the key effects to test disruption of transitivity:
-my_effects <- includeEffects(my_effects, 
-                           X, interaction1 = "dislike") # Main effect of dislike
-                           
-my_effects <- includeInteraction(my_effects,
-                                transTrip, X, 
-                                interaction1 = c("", "dislike"),
-                                name = "trust") # Dislike disrupting transitivity
+# 4. Friendship effect (dyadic covariate)
+my_effects <- includeEffects(my_effects, X, interaction1 = "friendship", name = "trust")
 
-my_effects <- includeInteraction(my_effects,
-                                transRecTrip, X,
-                                interaction1 = c("", "dislike"),
-                                name = "trust") # Dislike disrupting recip. transitivity
-effectsDocumentation ()
+# 5. Dislike main effect (dyadic covariate)
+my_effects <- includeEffects(my_effects, X, interaction1 = "dislike", name = "trust")
 
-# Basic structural effects
-my_effects <- includeEffects(my_effects, density, recip, cycle3)
-
-# Gender effects
-my_effects <- includeEffects(my_effects, egoX, altX, sameX, interaction1 = "gender")
-
-# Print to verify all effects are there
+# 6. BEFORE adding interactions, check effect numbers:
 print(my_effects)
+effects_df <- as.data.frame(my_effects)
+View(effects_df)  # Find the exact row numbers for transTrip and dislike effects
 
+# 7. Add interactions using EFFECT NUMBERS (not names)
+# Example (your numbers may differ):
+trans_trip_num <- 25  # Replace with actual number from effects_df
+dislike_num <- 262    # Replace with actual number from effects_df
+
+my_effects <- includeInteraction(my_effects,
+                               x = trans_trip_num,
+                               y = dislike_num,
+                               name = "trust")
+
+# 8. Gender controls
+my_effects <- includeEffects(my_effects, 
+                           egoX, altX, sameX, 
+                           interaction1 = "gender", 
+                           name = "trust")
+
+# Verify all effects
+print(my_effects)
 ```
 ```{r}
-GOf 
+my_effects <- getEffects(siena_data) %>%
+  includeEffects("density", name = "trust") %>%
+  includeEffects("recip", name = "trust") %>%
+  includeEffects("transTrip", name = "trust") %>%
+  includeEffects("X", interaction1 = "dislike", name = "trust") %>%
+  includeInteraction("transTrip", "X", 
+                    interaction1 = c("", "dislike"),
+                    name = "trust")
 ```
 
-```{r}
-
-```
 
 hypothesis 2 -
 
