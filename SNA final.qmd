@@ -8,7 +8,6 @@ hello how are you
 Our first step was to come up with some simple hypthesis and also choose which school and somehow this can be loaded into R as well if I write it here on the website then it will appear in my local project 
 
 
-
 ```{r}
 library(network)
 library(networkDynamic)
@@ -703,7 +702,7 @@ library(tidygraph)
 library(ggplot2)
 library(gridExtra)
 
-# 1. Robust data preparation
+#  data preparation
 prepare_class_data <- function() {
   class_files <- c("Networks_by_Type/Trustworthy/5500_24_9.csv",
                   "Networks_by_Type/Trustworthy/5500_22_9_2h.csv",
@@ -719,7 +718,7 @@ prepare_class_data <- function() {
     unique(c(rownames(mat), colnames(mat)))
   })))
   
-  # Create consistent matrices for each wave
+  # Consistent matrices for each wave
   waves <- lapply(class_files, function(file) {
     mat <- as.matrix(read.csv(file, row.names = 1))
     colnames(mat) <- gsub("^X", "", colnames(mat))
@@ -738,12 +737,12 @@ prepare_class_data <- function() {
   return(list(waves = waves, all_nodes = all_nodes))
 }
 
-# 2. Get network data
+# Network data
 class_data <- prepare_class_data()
 waves <- class_data$waves
 all_nodes <- class_data$all_nodes
 
-# 3. Create stable layout
+# 3. Stable layout
 combined_net <- Reduce("+", lapply(waves, function(x) {
   x[x > 0] <- 1
   x
@@ -753,7 +752,7 @@ set.seed(123)
 layout_pos <- layout_with_fr(g_full)
 rownames(layout_pos) <- all_nodes
 
-# 4. Final plotting function (guaranteed to work)
+# 4. Final plotting function
 plot_wave <- function(wave_matrix, wave_label) {
   # Get active nodes (non-zero rows or columns)
   active_nodes <- unique(c(
@@ -768,14 +767,14 @@ plot_wave <- function(wave_matrix, wave_label) {
              ggtitle(wave_label))
   }
   
-  # Create subgraph
+  # Subgraph
   sub_mat <- wave_matrix[active_nodes, active_nodes, drop = FALSE]
   g <- graph_from_adjacency_matrix(sub_mat, mode = "directed")
   
-  # Calculate out-degree CORRECTLY
+  # Out-degree 
   out_degree <- colSums(sub_mat)  # For directed graphs, out-degree is column sums
   
-  # Prepare plot data
+  # Plot data
   plot_data <- data.frame(
     name = active_nodes,
     x = layout_pos[active_nodes, 1],
@@ -783,7 +782,7 @@ plot_wave <- function(wave_matrix, wave_label) {
     outdegree = out_degree
   )
   
-  # Create edges data
+  # Edges data
   edges <- as.data.frame(get.edgelist(g))
   colnames(edges) <- c("from", "to")
   edges <- merge(edges, plot_data[, c("name", "x")], by.x = "from", by.y = "name")
@@ -791,7 +790,7 @@ plot_wave <- function(wave_matrix, wave_label) {
   edges <- merge(edges, plot_data[, c("name", "x")], by.x = "to", by.y = "name", suffixes = c("", ".to"))
   edges <- merge(edges, plot_data[, c("name", "y")], by.x = "to", by.y = "name", suffixes = c("", ".to"))
   
-  # Create plot
+  # Plots
   ggplot(plot_data, aes(x = x, y = y)) +
     geom_segment(data = edges, 
                 aes(x = x, y = y, xend = x.to, yend = y.to),
@@ -809,7 +808,7 @@ plot_wave <- function(wave_matrix, wave_label) {
     guides(size = "none")
 }
 
-# 5. Generate and display plots
+# Generating and displaying plots
 p1 <- plot_wave(waves$Wave1, "Wave 1")
 p2 <- plot_wave(waves$Wave2, "Wave 2")
 p3 <- plot_wave(waves$Wave3, "Wave 3")
@@ -819,9 +818,11 @@ grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
 
 
-hypothesis 1
+Siena analysis
 
 ```{r}
+
+#base file path
 process_all_networks <- function(class_number) {
   base_path <- "Networks_by_Type/"
   
@@ -841,7 +842,7 @@ process_all_networks <- function(class_number) {
     return(files)
   }
 
-  # Process each network type (keeping original object names)
+  # Networks 
   trust_data <- process_class_files(get_network_files("Trustworthy"))
   friend_data <- process_class_files(get_network_files("Good_friend"))
   dislike_data <- process_class_files(get_network_files("Dislike_hate"))
@@ -862,12 +863,12 @@ create_network_arrays <- function(net_data) {
   all_students <- sort(unique(net_data$vertices$vertex.names))
   n_students <- length(all_students)
   
-  # Initialize empty arrays for each wave
+  # Empty arrays for each wave
   wave1 <- wave2 <- wave3 <- wave4 <- 
     matrix(0, nrow = n_students, ncol = n_students,
            dimnames = list(all_students, all_students))
   
-  # Fill in each wave's matrix
+  # Creating each wave's matrix
   for (wave in 1:4) {
     wave_edges <- net_data$edges[net_data$edges$onset == wave, ]
     current_matrix <- get(paste0("wave", wave))
@@ -886,12 +887,12 @@ create_network_arrays <- function(net_data) {
   return(list(wave1, wave2, wave3, wave4))
 }
 
-# Create network arrays for each type
+# Network arrays for each type
 trust_arrays <- create_network_arrays(class5_all$trust)
 friendship_arrays <- create_network_arrays(class5_all$friendship)
 dislike_arrays <- create_network_arrays(class5_all$dislike)
 
- # Prepare gender attribute
+ # Gender attribute
 prepare_gender <- function(vertex_names, attribute_data) {
   # Get gender for each wave
   gender_w1 <- attribute_data$gender_1[match(vertex_names, attribute_data$idcode)]
@@ -899,7 +900,7 @@ prepare_gender <- function(vertex_names, attribute_data) {
   gender_w3 <- attribute_data$gender_3[match(vertex_names, attribute_data$idcode)]
   gender_w4 <- attribute_data$gender_4[match(vertex_names, attribute_data$idcode)]
   
-  # Combine into matrix (students x waves)
+  # Matrix (students x waves)
   gender_matrix <- cbind(gender_w1, gender_w2, gender_w3, gender_w4)
   rownames(gender_matrix) <- vertex_names
   
@@ -932,7 +933,7 @@ dislike <- varDyadCovar(
 
 # 3. Create nodal covariate (gender)
 gender <- varCovar(gender_matrix[,1:3]) # Time-varying
-# OR if time-constant: gender <- coCovar(gender_matrix[,1])
+  # OR if time-constant: gender <- coCovar(gender_matrix[,1])
 
 # 4. Combine into RSiena dataset
 siena_data <- sienaDataCreate(trust, friendship, dislike, gender)
@@ -945,7 +946,7 @@ my_effects <- getEffects(siena_data)
 
 # Add effects to test hypotheses:
 # 1. High transitivity in trust network
-my_effects <- includeEffects(my_effects, transTrip, transRecTrip)
+my_effects <- includeEffects(my_effects, transTrip, transRecTrip,)
 
 # 2. Friendship leads to more trust
 my_effects <- includeEffects(my_effects, X, interaction1 = "friendship")
@@ -1022,6 +1023,9 @@ my_effects <- includeEffects(my_effects, egoX, altX, sameX, interaction1 = "gend
 # Print to verify all effects are there
 print(my_effects)
 
+```
+```{r}
+GOf 
 ```
 
 ```{r}
