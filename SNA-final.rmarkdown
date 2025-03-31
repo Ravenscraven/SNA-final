@@ -2,10 +2,14 @@
 title: "SNA final try out local"
 ---
 
+
+
 ## Introduction
 
 hello how are you 
 Our first step was to come up with some simple hypthesis and also choose which school and somehow this can be loaded into R as well if I write it here on the website then it will appear in my local project 
+
+
 
 
 ```{r}
@@ -203,7 +207,11 @@ print(results)
 write.csv(results, "class_wave_frontpg_means.csv", row.names = FALSE)
 ```
 
+
+
 any id's with quality 3 or 4
+
+
 
 ```{r}
 # Load attribute data
@@ -250,7 +258,11 @@ write.csv(scorers_3_or_4, "high_scorers_3_or_4.csv", row.names = FALSE)
 write.csv(scorers_4, "high_scorers_4.csv", row.names = FALSE)
 ```
 
+
+
 In class 5 we find a few ID's for which the the quality number is low but none where both reviewers agree on a 3 or 4 rating so no exclusion is needed.
+
+
 
 ```{r}
 # Helper function for single class animations below
@@ -346,7 +358,11 @@ set_fixed_layout <- function(net) {
 
 ```
 
+
+
 Class 1 single animated
+
+
 
 ```{r}
 
@@ -512,9 +528,13 @@ render.d3movie(
 )
 ```
 
+
+
 In the lectures we learned that it's important that states correspond to ev and that networks should be somewhat stable to be suitable for SAOM type analysis.
 
 To check the the stability of the networks we should therefore conduct a Hamming distance analysis - which indicates how many small steps are needed to reach the second network from first as well as the Jaccard index - which shows what percentage share of ties spears more than once among observed ties, therefore indicating how stable the network is.
+
+
 
 ```{r}
 
@@ -693,7 +713,11 @@ results_df <- do.call(rbind, lapply(class_analyses, function(x) {
 View(results_df)
 ```
 
+
+
 network visualisation 1
+
+
 
 ```{r}
 library(igraph)
@@ -817,10 +841,14 @@ grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
 
 
+
+
 Siena analysis
 
 
 dislike 
+
+
 
 ```{r}
 
@@ -984,13 +1012,13 @@ html_table <- siena.table(my_results, type = "html", tstat = TRUE, sig = TRUE, d
 ```
 
 ```{r}
-#Goodness of Fit 
+#Goodness of Fit without coevolution
 
 # For indegree distribution
 gof_indeg <- sienaGOF(my_results, 
                      varName = "trust",
                      IndegreeDistribution,
-                     cumulative = FALSE,
+                     cumulative = FALSE,  
                      verbose = TRUE)
 
 # For outdegree distribution  
@@ -1017,7 +1045,6 @@ gof_summary <- data.frame(
 )
 
 ```
-
 
 ```{r}
 # Get basic effects
@@ -1075,7 +1102,6 @@ my_effects <- includeEffects(my_effects,
 print(my_effects)
 ```
 
-
 ```{r}
 # effect 3 no work attempted fix nor wok
 print(siena_data)
@@ -1116,6 +1142,7 @@ my_effects <- includeEffects(my_effects, egoX, altX, sameX, interaction1 = "gend
 print(my_effects)
 
 ```
+
 ```{r}
 GOf 
 ```
@@ -1124,8 +1151,11 @@ GOf
 
 ```
 
+
+
 hypothesis 2 -
 
 good friendship enhances trust
 
 example v
+
