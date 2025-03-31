@@ -918,23 +918,23 @@ library(RSiena)
 
 # 1. Create dependent variable (trust) - 3 waves
 trust <- sienaDependent(
-  array(data = c(trust_arrays[[1]], trust_arrays[[2]], trust_arrays[[3]]),
-        dim = c(length(vertex_names), length(vertex_names), 3))
+  array(data = c(trust_arrays[[1]], trust_arrays[[2]], trust_arrays[[3]], trust_arrays[[4]]),
+        dim = c(length(vertex_names), length(vertex_names), 4))
 )
 
 # 2. Create dyadic covariates - 2 waves each
 friendship <- varDyadCovar(
-  array(data = c(friendship_arrays[[1]], friendship_arrays[[2]]),
-        dim = c(length(vertex_names), length(vertex_names), 2))
+  array(data = c(friendship_arrays[[1]], friendship_arrays[[2]], friendship_arrays[[3]]),
+        dim = c(length(vertex_names), length(vertex_names), 3))
 )
 
 dislike <- varDyadCovar(
-  array(data = c(dislike_arrays[[1]], dislike_arrays[[2]]),
-        dim = c(length(vertex_names), length(vertex_names), 2))
+  array(data = c(dislike_arrays[[1]], dislike_arrays[[2]], dislike_arrays[[3]]),
+        dim = c(length(vertex_names), length(vertex_names), 3))
 )
 
 # Nodal covariate (gender)
-gender <- varCovar(gender_matrix[,1:3]) # Time-varying
+gender <- varCovar(gender_matrix[,1:4]) # Time-varying
 
 # 4. Combine into RSiena dataset
 siena_data <- sienaDataCreate(trust, friendship, dislike, gender)
@@ -1023,12 +1023,6 @@ my_effects1 <- includeEffects(my_effects1, transTrip, transRecTrip,)
 # 2. Friendship leads to more trust
 my_effects1 <- includeEffects(my_effects1, X, interaction1 = "friendship")
 
-# Add some basic structural effects
-my_effects1 <- includeEffects(my_effects1, density, recip, cycle, inPop, reciAct, outPop) # 1. added inPop and reciAct
-
-
-# Add gender effects
-my_effects1 <- includeEffects(my_effects1, egoX, altX, sameX, interaction1 = "gender") 
 
 
 
@@ -1085,174 +1079,6 @@ plot(gof_indeg1, main = "Indegree Distribution GOF")
 plot(gof_outdeg1, main = "Outdegree Distribution GOF")
 plot(gof_triad1, center = TRUE, scale = TRUE, main = "Triad Census GOF")
 
-```
-
-
-```{r}
-# 1. First include all basic effects
-# 1. Get basic effects
-my_effects <- getEffects(siena_data)
-
-# 2. Basic structural effects (add one by one)
-my_effects <- includeEffects(my_effects, density, name = "trust")
-my_effects <- includeEffects(my_effects, recip, name = "trust")
-my_effects <- includeEffects(my_effects, cycle3, name = "trust")
-
-# 3. Transitivity effects
-my_effects <- includeEffects(my_effects, transTrip, name = "trust")
-my_effects <- includeEffects(my_effects, transRecTrip, name = "trust")
-
-# 4. Friendship effect
-my_effects <- includeEffects(my_effects, X, interaction1 = "friendship", name = "trust")
-
-# 5. Dislike main effect
-my_effects <- includeEffects(my_effects, X, interaction1 = "dislike", name = "trust")
-
-
-
-
-# 7. Gender controls
-my_effects <- includeEffects(my_effects, egoX, altX, sameX, 
-                           interaction1 = "gender", name = "trust")
-
-# Verify all effects
-print(my_effects)
-```
-
-```{r}
-# 1. First create ALL main effects
-my_effects <- getEffects(siena_data) %>%
-  includeEffects("density", name = "trust") %>%  # density effect
-  includeEffects("recip", name = "trust") %>%
-  includeEffects("transTrip", name = "trust") %>%
-  includeEffects("transRecTrip", name = "trust") %>%
-  includeEffects("X", interaction1 = "friendship", name = "trust") %>%
-  includeEffects("X", interaction1 = "dislike", name = "trust")
-
-# 2. Add interaction using ALTERNATIVE SYNTAX that always works
-my_effects <- setEffect(my_effects, 
-                       name = "trust",
-                       interaction1 = "transTrip",
-                       interaction2 = "dislike",
-                       include = TRUE,
-                       type = "eval")
-
-# 3. Verify with character=TRUE to see the math
-my_effects <- includeInteraction(my_effects,
-                               "transTrip", "X",
-                               interaction1 = c("", "dislike"),
-                               name = "trust",
-                               character = TRUE)  # Will print the formula
-```
-
-
-```{r}
-# Get basic effects
-my_effects <- getEffects(siena_data)
-
-# 1. Basic structural effects
-my_effects <- includeEffects(my_effects, 
-                           density,    # Baseline tendency to form trust ties
-                           recip,     # Reciprocity in trust
-                           cycle3)    # 3-cycles (balance)
-
-# 2. Transitivity effects (Hypothesis 1)
-my_effects <- includeEffects(my_effects,
-                           transTrip,       # Standard transitivity
-                           transRecTrip)   # Transitive reciprocity
-
-# 3. Friendship effect (Hypothesis 2)
-my_effects <- includeEffects(my_effects,
-                           X, 
-                           interaction1 = "friendship")
-
-# 4. Dislike effects (Hypothesis 3)
-# Main effect of dislike on trust
-my_effects <- includeEffects(my_effects,
-                           X,
-                           interaction1 = "dislike")
-
-# Dislike disrupting standard transitivity:
-# (A→B trusts AND B→C dislikes reduces A→C trust)
-my_effects <- includeInteraction(my_effects,
-                               transTrip, X,
-                               interaction1 = c("", "dislike"),
-                               name = "trust")
-
-# Dislike disrupting transitive reciprocity:
-# (A→B trusts AND B↔C mutual dislike reduces A→C trust)
-my_effects <- includeInteraction(my_effects,
-                               transRecTrip, X,
-                               interaction1 = c("", "dislike"),
-                               name = "trust")
-
-# 5. NEW: Dislike-mediated trust inhibition
-# (A→B trusts AND B→C dislikes specifically reduces A→C trust)
-my_effects <- includeInteraction(my_effects,
-                               egoX, altX,
-                               interaction1 = c("trust", "dislike"),
-                               name = "trust")
-
-# 6. Gender controls
-my_effects <- includeEffects(my_effects,
-                           egoX, altX, sameX,
-                           interaction1 = "gender")
-
-# Verify all effects
-print(my_effects)
-```
-```{r}
-# 1. Get basic effects - MUST specify the dependent variable name
-my_effects <- getEffects(siena_data)
-
-# 2. Basic structural effects (add one by one with explicit network name)
-my_effects <- includeEffects(my_effects, density, name = "trust")
-my_effects <- includeEffects(my_effects, recip, name = "trust") 
-my_effects <- includeEffects(my_effects, cycle3, name = "trust")
-
-# 3. Transitivity effects
-my_effects <- includeEffects(my_effects, transTrip, name = "trust")
-my_effects <- includeEffects(my_effects, transRecTrip, name = "trust")
-
-# 4. Friendship effect (dyadic covariate)
-my_effects <- includeEffects(my_effects, X, interaction1 = "friendship", name = "trust")
-
-# 5. Dislike main effect (dyadic covariate)
-my_effects <- includeEffects(my_effects, X, interaction1 = "dislike", name = "trust")
-
-# 6. BEFORE adding interactions, check effect numbers:
-print(my_effects)
-effects_df <- as.data.frame(my_effects)
-View(effects_df)  # Find the exact row numbers for transTrip and dislike effects
-
-# 7. Add interactions using EFFECT NUMBERS (not names)
-# Example (your numbers may differ):
-trans_trip_num <- 25  # Replace with actual number from effects_df
-dislike_num <- 262    # Replace with actual number from effects_df
-
-my_effects <- includeInteraction(my_effects,
-                               x = trans_trip_num,
-                               y = dislike_num,
-                               name = "trust")
-
-# 8. Gender controls
-my_effects <- includeEffects(my_effects, 
-                           egoX, altX, sameX, 
-                           interaction1 = "gender", 
-                           name = "trust")
-
-# Verify all effects
-print(my_effects)
-```
-```{r}
-my_effects <- getEffects(siena_data) %>%
-  includeEffects("density", name = "trust") %>%
-  includeEffects("recip", name = "trust") %>%
-  includeEffects("transTrip", name = "trust") %>%
-  includeEffects("X", interaction1 = "dislike", name = "trust") %>%
-  includeInteraction("transTrip", "X", 
-                    interaction1 = c("", "dislike"),
-                    name = "trust")
 ```
 
 
